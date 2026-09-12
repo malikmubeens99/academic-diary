@@ -29,7 +29,11 @@ const db = getFirestore(app);
 document.addEventListener("DOMContentLoaded", () => {
   onAuthStateChanged(auth, async (user) => {
     if (!user) {
-      await signInAnonymously(auth);
+      try {
+        await signInAnonymously(auth);
+      } catch (err) {
+        console.error("Auth error:", err);
+      }
     } else {
       loadUserData(user.uid);
       checkAndRegisterServiceWorker();
@@ -110,7 +114,9 @@ async function loadUserData(userId) {
   const fullTimetable = document.getElementById("fullTimetable");
   const diaryList = document.getElementById("diaryList");
 
-  todayLabel.textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  if (todayLabel) {
+    todayLabel.textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  }
 
   try {
     const timetableSnap = await getDocs(collection(db, `users/${userId}/timetable`));
@@ -166,9 +172,13 @@ async function loadUserData(userId) {
     let diaryEntries = [];
     diarySnap.forEach(d => diaryEntries.push(d.data()));
 
-    document.getElementById("diaryCount").textContent = diaryEntries.length;
-    document.getElementById("studyHours").textContent = `${timetable.length * 2}h`;
-    document.getElementById("streak").textContent = `${Math.max(1, diaryEntries.length)} days`;
+    const diaryCountEl = document.getElementById("diaryCount");
+    const studyHoursEl = document.getElementById("studyHours");
+    const streakEl = document.getElementById("streak");
+
+    if (diaryCountEl) diaryCountEl.textContent = diaryEntries.length;
+    if (studyHoursEl) studyHoursEl.textContent = `${timetable.length * 2}h`;
+    if (streakEl) streakEl.textContent = `${Math.max(1, diaryEntries.length)} days`;
 
     if (diaryList) {
       let dHtml = "";
@@ -215,7 +225,8 @@ async function loadAssignmentsAndStats(userId) {
   if (assignmentList) {
     assignmentList.innerHTML = aHtml || "<p style='color: #94a3b8;'>No pending assignments.</p>";
   }
-  document.getElementById("pendingCount").textContent = pendingCount;
+  const pendingCountEl = document.getElementById("pendingCount");
+  if (pendingCountEl) pendingCountEl.textContent = pendingCount;
 }
 
 function renderSubjectProgress(timetable, diaryEntries) {
@@ -266,25 +277,33 @@ function setupModalHandlers() {
     const taught = document.getElementById("taught").value;
     const assignment = document.getElementById("assignment").value;
     const deadline = document.getElementById("deadline").value;
-    const user = auth.currentUser;
+    
+    let user = auth.currentUser;
+    if (!user) {
+      try {
+        const cred = await signInAnonymously(auth);
+        user = cred.user;
+      } catch (err) {
+        alert("Authentication failed.");
+        return;
+      }
+    }
 
     if (!taught) {
       alert("Please write what was taught today.");
       return;
     }
 
-    if (user) {
-      try {
-        await addDoc(collection(db, `users/${user.uid}/diary`), { subject, taught, date: new Date().toISOString() });
-        if (assignment) {
-          await addDoc(collection(db, `users/${user.uid}/assignments`), { title: assignment, subject, deadline: deadline || "No deadline", completed: false });
-        }
-        alert("Entry saved successfully!");
-        modal.classList.add("hidden");
-        loadUserData(user.uid);
-      } catch (err) {
-        alert("Error saving: " + err.message);
+    try {
+      await addDoc(collection(db, `users/${user.uid}/diary`), { subject, taught, date: new Date().toISOString() });
+      if (assignment) {
+        await addDoc(collection(db, `users/${user.uid}/assignments`), { title: assignment, subject, deadline: deadline || "No deadline", completed: false });
       }
+      alert("Entry saved successfully!");
+      modal.classList.add("hidden");
+      loadUserData(user.uid);
+    } catch (err) {
+      alert("Error saving: " + err.message);
     }
   });
 }
@@ -298,10 +317,16 @@ function setupTimetableUpload() {
     if (!file) return;
 
     statusDiv.textContent = "Analyzing timetable with AI... Please wait ⏳";
-    const user = auth.currentUser;
+    
+    let user = auth.currentUser;
     if (!user) {
-      statusDiv.textContent = "Error: User not authenticated.";
-      return;
+      try {
+        const cred = await signInAnonymously(auth);
+        user = cred.user;
+      } catch (err) {
+        statusDiv.textContent = "Error: User authentication failed.";
+        return;
+      }
     }
 
     try {
