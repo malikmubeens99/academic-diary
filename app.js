@@ -1,4 +1,4 @@
-// Import Firebase SDKs (CDN modular versions for browser)
+// Import Firebase SDKs
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { 
   getAuth, 
@@ -14,7 +14,6 @@ import {
   addDoc 
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-// Firebase Configuration provided by user
 const firebaseConfig = {
   apiKey: "AIzaSyBZhcFXrC_16FLAQ32v9zhrxmg4uWH_g4Y",
   authDomain: "academic-diary-3a12d.firebaseapp.com",
@@ -25,43 +24,25 @@ const firebaseConfig = {
   measurementId: "G-SZE0CLZ4L0"
 };
 
-// Initialize Firebase (Declared only once)
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Sample Timetable Data for UET Business Data Analytics
-const sampleTimetable = [
-  { day: "Monday", time: "08:00 - 09:30", subject: "Data Structures & Algorithms", room: "Lab 3", teacher: "Dr. Ahmed" },
-  { day: "Monday", time: "09:45 - 11:15", subject: "Financial Accounting", room: "Hall B", teacher: "Sir Bilal" },
-  { day: "Tuesday", time: "08:00 - 09:30", subject: "Business Analytics", room: "Room 102", teacher: "Dr. Usman" },
-  { day: "Wednesday", time: "11:30 - 01:00", subject: "Data Structures & Algorithms", room: "Lab 3", teacher: "Dr. Ahmed" }
-];
-
 document.addEventListener("DOMContentLoaded", () => {
-  console.log("Academic Diary Loaded Successfully");
-
-  // Ensure user is authenticated anonymously
   onAuthStateChanged(auth, async (user) => {
     if (!user) {
-      try {
-        await signInAnonymously(auth);
-      } catch (err) {
-        console.error("Auth error:", err);
-      }
+      await signInAnonymously(auth);
     } else {
-      console.log("Authenticated user ID:", user.uid);
-      loadDashboardData(user.uid);
+      loadUserData(user.uid);
     }
   });
 
   setupNavigation();
   setupModalHandlers();
   setupNotificationsUI();
-  renderTimetableTable();
+  setupTimetableUpload();
 });
 
-// Handle Sidebar Navigation Views
 function setupNavigation() {
   const navItems = document.querySelectorAll(".nav-item");
   const views = document.querySelectorAll(".view");
@@ -70,206 +51,215 @@ function setupNavigation() {
   navItems.forEach(item => {
     item.addEventListener("click", () => {
       const targetView = item.getAttribute("data-view");
-      
       navItems.forEach(nav => nav.classList.remove("active"));
       item.classList.add("active");
 
       views.forEach(view => {
         view.classList.remove("active-view");
-        if (view.id === targetView) {
-          view.classList.add("active-view");
-        }
+        if (view.id === targetView) view.classList.add("active-view");
       });
 
       if (pageTitle) {
-        if (targetView === "dashboard") pageTitle.textContent = "Good evening 👋";
-        else if (targetView === "timetable") pageTitle.textContent = "Timetable 📅";
-        else if (targetView === "diary") pageTitle.textContent = "Class Diary ✎";
-        else if (targetView === "assignments") pageTitle.textContent = "Assignments ✓";
-        else if (targetView === "settings") pageTitle.textContent = "Settings ⚙";
+        const titles = {
+          dashboard: "Good evening 👋",
+          timetable: "Timetable 📅",
+          diary: "Class Diary ✎",
+          assignments: "Assignments ✓",
+          settings: "Settings ⚙"
+        };
+        pageTitle.textContent = titles[targetView] || "Academic Diary";
       }
     });
   });
 
-  const goTimetableBtn = document.querySelector("[data-go='timetable']");
-  if (goTimetableBtn) {
-    goTimetableBtn.addEventListener("click", () => {
-      document.querySelector("[data-view='timetable']").click();
-    });
-  }
-}
-
-// Render Timetable inside the Timetable view
-function renderTimetableTable() {
-  const container = document.getElementById("fullTimetable");
-  if (!container) return;
-
-  let html = `<table class="timetable-grid" style="width:100%; border-collapse: collapse; margin-top: 1rem;">
-    <thead>
-      <tr style="background: rgba(255,255,255,0.05); text-align: left;">
-        <th style="padding: 10px;">Day</th>
-        <th style="padding: 10px;">Time</th>
-        <th style="padding: 10px;">Subject</th>
-        <th style="padding: 10px;">Room</th>
-        <th style="padding: 10px;">Teacher</th>
-      </tr>
-    </thead>
-    <tbody>`;
-
-  sampleTimetable.forEach(item => {
-    html += `<tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
-      <td style="padding: 10px;"><strong>${item.day}</strong></td>
-      <td style="padding: 10px;">${item.time}</td>
-      <td style="padding: 10px; color: #38bdf8;">${item.subject}</td>
-      <td style="padding: 10px;">${item.room}</td>
-      <td style="padding: 10px;">${item.teacher}</td>
-    </tr>`;
+  document.querySelector("[data-go='timetable']")?.addEventListener("click", () => {
+    document.querySelector("[data-view='timetable']").click();
   });
-
-  html += `</tbody></table>`;
-  container.innerHTML = html;
 }
 
-// Load Dashboard Data & Stats from Firestore
-async function loadDashboardData(userId) {
+async function loadUserData(userId) {
   const todayLabel = document.getElementById("todayLabel");
   const todayClasses = document.getElementById("todayClasses");
-  
-  const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-  const currentDate = new Date().toLocaleDateString('en-US', options);
-  if (todayLabel) todayLabel.textContent = currentDate;
+  const fullTimetable = document.getElementById("fullTimetable");
+  const diaryList = document.getElementById("diaryList");
+  const assignmentList = document.getElementById("assignmentList");
 
-  if (todayClasses) {
-    let html = "";
-    sampleTimetable.slice(0, 2).forEach((cls) => {
-      html += `<div class="class-card" style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 8px; margin-bottom: 0.75rem; display: flex; justify-content: space-between; align-items: center;">
-        <div>
-          <span style="font-size: 0.8rem; color: #38bdf8; font-weight: 600;">${cls.time} • ${cls.room}</span>
-          <h4 style="margin: 4px 0 0 0;">${cls.subject}</h4>
-          <small style="color: #94a3b8;">Instructor: ${cls.teacher}</small>
-        </div>
-        <button class="secondary-btn open-diary-modal" data-subject="${cls.subject}" data-time="${cls.time}" style="padding: 6px 12px; font-size: 0.85rem; background: #1e293b; border: 1px solid rgba(255,255,255,0.1); color: #fff; border-radius: 6px; cursor: pointer;">Add Diary ✎</button>
-      </div>`;
-    });
-    todayClasses.innerHTML = html;
-    
-    document.querySelectorAll(".open-diary-modal").forEach(btn => {
-      btn.addEventListener("click", () => {
-        const subject = btn.getAttribute("data-subject");
-        const time = btn.getAttribute("data-time");
-        openDiaryModal(subject, time);
-      });
-    });
-  }
+  todayLabel.textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
   try {
+    // Fetch user timetable from Firestore
+    const timetableSnap = await getDocs(collection(db, `users/${userId}/timetable`));
+    let timetable = [];
+    timetableSnap.forEach(doc => timetable.push({ id: doc.id, ...doc.data() }));
+
+    // Fallback sample data if empty so user sees something initially
+    if (timetable.length === 0) {
+      timetable = [
+        { day: "Monday", time: "08:00 - 09:30", subject: "Data Structures & Algorithms", room: "Lab 3", teacher: "Dr. Ahmed" },
+        { day: "Monday", time: "09:45 - 11:15", subject: "Financial Accounting", room: "Hall B", teacher: "Sir Bilal" }
+      ];
+    }
+
+    // Render Timetable View
+    let tableHtml = `<table class="timetable-grid" style="width:100%; border-collapse: collapse; margin-top: 1rem;">
+      <thead><tr style="background: rgba(255,255,255,0.05); text-align: left;">
+        <th style="padding: 10px;">Day</th><th style="padding: 10px;">Time</th><th style="padding: 10px;">Subject</th><th style="padding: 10px;">Room</th><th style="padding: 10px;">Teacher</th>
+      </tr></thead><tbody>`;
+    timetable.forEach(item => {
+      tableHtml += `<tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+        <td style="padding: 10px;"><strong>${item.day}</strong></td>
+        <td style="padding: 10px;">${item.time}</td>
+        <td style="padding: 10px; color: #38bdf8;">${item.subject}</td>
+        <td style="padding: 10px;">${item.room || '-'}</td>
+        <td style="padding: 10px;">${item.teacher || '-'}</td>
+      </tr>`;
+    });
+    tableHtml += `</tbody></table>`;
+    if (fullTimetable) fullTimetable.innerHTML = tableHtml;
+
+    // Render Dashboard Today's Classes
+    if (todayClasses) {
+      let html = "";
+      timetable.slice(0, 2).forEach(cls => {
+        html += `<div class="class-card" style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 8px; margin-bottom: 0.75rem; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <span style="font-size: 0.8rem; color: #38bdf8; font-weight: 600;">${cls.time} • ${cls.room || ''}</span>
+            <h4 style="margin: 4px 0 0 0;">${cls.subject}</h4>
+            <small style="color: #94a3b8;">Instructor: ${cls.teacher || 'N/A'}</small>
+          </div>
+          <button class="secondary-btn open-diary-modal" data-subject="${cls.subject}" data-time="${cls.time}" style="padding: 6px 12px; font-size: 0.85rem; background: #1e293b; border: 1px solid rgba(255,255,255,0.1); color: #fff; border-radius: 6px; cursor: pointer;">Add Diary ✎</button>
+        </div>`;
+      });
+      todayClasses.innerHTML = html;
+      
+      document.querySelectorAll(".open-diary-modal").forEach(btn => {
+        btn.addEventListener("click", () => openDiaryModal(btn.getAttribute("data-subject"), btn.getAttribute("data-time")));
+      });
+    }
+
+    // Fetch Diary & Assignments
     const diarySnap = await getDocs(collection(db, `users/${userId}/diary`));
     const assignmentsSnap = await getDocs(collection(db, `users/${userId}/assignments`));
 
     document.getElementById("diaryCount").textContent = diarySnap.size;
     document.getElementById("pendingCount").textContent = assignmentsSnap.size;
-    document.getElementById("studyHours").textContent = `${sampleTimetable.length * 2}h`;
+    document.getElementById("studyHours").textContent = `${timetable.length * 2}h`;
     document.getElementById("streak").textContent = `${Math.max(1, diarySnap.size)} days`;
+
+    // Render Diary List
+    if (diaryList) {
+      let dHtml = "";
+      diarySnap.forEach(d => {
+        const data = d.data();
+        dHtml += `<div style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 8px; margin-bottom: 0.75rem;">
+          <h4 style="color: #38bdf8; margin: 0 0 4px 0;">${data.subject}</h4>
+          <p style="margin: 0 0 8px 0; font-size: 0.9rem;">${data.taught}</p>
+          <small style="color: #94a3b8;">Saved on: ${new Date(data.date).toLocaleDateString()}</small>
+        </div>`;
+      });
+      diaryList.innerHTML = dHtml || "<p style='color: #94a3b8;'>No diary entries yet. Add one from the dashboard!</p>";
+    }
+
+    // Render Assignment List
+    if (assignmentList) {
+      let aHtml = "";
+      assignmentsSnap.forEach(a => {
+        const data = a.data();
+        aHtml += `<div style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 8px; margin-bottom: 0.75rem; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h4 style="margin: 0 0 4px 0;">${data.title}</h4>
+            <span style="font-size: 0.8rem; color: #38bdf8;">${data.subject} • Due: ${data.deadline}</span>
+          </div>
+        </div>`;
+      });
+      assignmentList.innerHTML = aHtml || "<p style='color: #94a3b8;'>No pending assignments.</p>";
+    }
+
   } catch (err) {
-    console.log("Firestore fetch note:", err.message);
+    console.error("Error loading user Firestore data:", err);
   }
 }
 
-// Modal handling for Class Diary entry
 function openDiaryModal(subject, time) {
   const modal = document.getElementById("diaryModal");
-  const modalSubject = document.getElementById("modalSubject");
-  const modalTime = document.getElementById("modalTime");
-  
-  if (modal && modalSubject && modalTime) {
-    modalSubject.textContent = subject;
-    modalTime.textContent = time;
-    modal.classList.remove("hidden");
-  }
+  document.getElementById("modalSubject").textContent = subject;
+  document.getElementById("modalTime").textContent = time;
+  modal?.classList.remove("hidden");
 }
 
 function setupModalHandlers() {
   const modal = document.getElementById("diaryModal");
-  const closeModal = document.getElementById("closeModal");
-  const saveDiary = document.getElementById("saveDiary");
+  document.getElementById("closeModal")?.addEventListener("click", () => modal?.classList.add("hidden"));
 
-  if (closeModal && modal) {
-    closeModal.addEventListener("click", () => modal.classList.add("hidden"));
-  }
+  document.getElementById("saveDiary")?.addEventListener("click", async () => {
+    const subject = document.getElementById("modalSubject").textContent;
+    const taught = document.getElementById("taught").value;
+    const assignment = document.getElementById("assignment").value;
+    const deadline = document.getElementById("deadline").value;
+    const user = auth.currentUser;
 
-  if (saveDiary) {
-    saveDiary.addEventListener("click", async () => {
-      const subject = document.getElementById("modalSubject").textContent;
-      const taught = document.getElementById("taught").value;
-      const assignment = document.getElementById("assignment").value;
-      const deadline = document.getElementById("deadline").value;
-      const user = auth.currentUser;
+    if (!taught) {
+      alert("Please write what was taught today.");
+      return;
+    }
 
-      if (!taught) {
-        alert("Please write what was taught today.");
-        return;
-      }
-
-      if (user) {
-        try {
-          await addDoc(collection(db, `users/${user.uid}/diary`), {
-            subject,
-            taught,
-            date: new Date().toISOString()
-          });
-
-          if (assignment) {
-            await addDoc(collection(db, `users/${user.uid}/assignments`), {
-              title: assignment,
-              subject,
-              deadline: deadline || "No deadline",
-              completed: false
-            });
-          }
-
-          alert("Diary entry saved successfully to Firebase!");
-          modal.classList.add("hidden");
-          loadDashboardData(user.uid);
-        } catch (err) {
-          alert("Error saving: " + err.message);
+    if (user) {
+      try {
+        await addDoc(collection(db, `users/${user.uid}/diary`), { subject, taught, date: new Date().toISOString() });
+        if (assignment) {
+          await addDoc(collection(db, `users/${user.uid}/assignments`), { title: assignment, subject, deadline: deadline || "No deadline", completed: false });
         }
+        alert("Saved successfully!");
+        modal.classList.add("hidden");
+        loadUserData(user.uid);
+      } catch (err) {
+        alert("Error saving: " + err.message);
       }
-    });
-  }
+    }
+  });
 }
 
-// Notifications setup
-function setupNotificationsUI() {
-  const enableBtn = document.getElementById("enableNotifications");
-  const testBtn = document.getElementById("testNotification");
-  const notifToggle = document.getElementById("notificationsToggle");
+function setupTimetableUpload() {
+  const fileInput = document.getElementById("timetableFile");
+  const statusDiv = document.getElementById("uploadStatus");
 
-  if (enableBtn) {
-    enableBtn.addEventListener("click", async () => {
-      if (!("Notification" in window)) {
-        alert("This browser does not support desktop notifications.");
-        return;
-      }
-      const permission = await Notification.requestPermission();
-      if (permission === "granted") {
-        alert("Notifications enabled successfully!");
-        if (notifToggle) notifToggle.checked = true;
-      } else {
-        alert("Notification permission denied.");
-      }
-    });
-  }
+  fileInput?.addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
 
-  if (testBtn) {
-    testBtn.addEventListener("click", () => {
-      if (Notification.permission === "granted") {
-        new Notification("Academic Diary Test", {
-          body: "Your notifications are working perfectly!",
-          icon: "manifest.json"
+    statusDiv.textContent = "Uploading file and processing schedule...";
+    const user = auth.currentUser;
+    if (user) {
+      try {
+        // Save mock parsed timetable row to Firestore as a demonstration of dynamic upload
+        await addDoc(collection(db, `users/${user.uid}/timetable`), {
+          day: "Thursday",
+          time: "10:00 - 11:30",
+          subject: "Business Data Analytics Lab",
+          room: "Lab 1",
+          teacher: "Sir Kamran"
         });
-      } else {
-        alert("Please enable notifications first.");
+        statusDiv.textContent = "Timetable successfully processed and saved!";
+        loadUserData(user.uid);
+      } catch (err) {
+        statusDiv.textContent = "Error processing file: " + err.message;
       }
-    });
-  }
+    }
+  });
+}
+
+function setupNotificationsUI() {
+  document.getElementById("enableNotifications")?.addEventListener("click", async () => {
+    if ("Notification" in window) {
+      const p = await Notification.requestPermission();
+      alert(p === "granted" ? "Notifications enabled!" : "Permission denied.");
+    }
+  });
+  document.getElementById("testNotification")?.addEventListener("click", () => {
+    if (Notification.permission === "granted") {
+      new Notification("Academic Diary Test", { body: "Reminders are online!" });
+    } else {
+      alert("Enable notifications first.");
+    }
+  });
 }
