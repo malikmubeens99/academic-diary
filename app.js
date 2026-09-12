@@ -1,18 +1,6 @@
-// Import Firebase SDKs
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { 
-  getAuth, 
-  onAuthStateChanged,
-  signInAnonymously 
-} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-import { 
-  getFirestore, 
-  doc, 
-  getDoc, 
-  collection, 
-  getDocs, 
-  addDoc 
-} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { getFirestore, collection, getDocs, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBZhcFXrC_16FLAQ32v9zhrxmg4uWH_g4Y",
@@ -46,9 +34,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 function checkAndRegisterServiceWorker() {
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js')
-      .then(reg => console.log('Service Worker registered:', reg.scope))
-      .catch(err => console.error('Service Worker registration failed:', err));
+    navigator.serviceWorker.register('/sw.js').catch(err => console.error('SW error:', err));
   }
 }
 
@@ -129,7 +115,6 @@ async function loadUserData(userId) {
 
     const timetable = mergeConsecutiveClasses(rawTimetable);
 
-    // Render Timetable
     let tableHtml = `<table class="timetable-grid" style="width:100%; border-collapse: collapse; margin-top: 1rem;">
       <thead><tr style="background: rgba(255,255,255,0.05); text-align: left;">
         <th style="padding: 10px;">Day</th><th style="padding: 10px;">Time</th><th style="padding: 10px;">Subject</th><th style="padding: 10px;">Room</th><th style="padding: 10px;">Teacher</th>
@@ -146,7 +131,6 @@ async function loadUserData(userId) {
     tableHtml += `</tbody></table>`;
     if (fullTimetable) fullTimetable.innerHTML = tableHtml;
 
-    // Render Today's Classes
     if (todayClasses) {
       let html = "";
       timetable.slice(0, 2).forEach(cls => {
@@ -174,7 +158,6 @@ async function loadUserData(userId) {
     document.getElementById("studyHours").textContent = `${timetable.length * 2}h`;
     document.getElementById("streak").textContent = `${Math.max(1, diaryEntries.length)} days`;
 
-    // Render Diary List
     if (diaryList) {
       let dHtml = "";
       diaryEntries.forEach(data => {
