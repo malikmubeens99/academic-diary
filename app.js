@@ -1,6 +1,16 @@
+// Import Firebase SDKs
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-import { getFirestore, collection, getDocs, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { 
+  getAuth, 
+  onAuthStateChanged,
+  signInAnonymously 
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { 
+  getFirestore, 
+  collection, 
+  getDocs, 
+  addDoc 
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBZhcFXrC_16FLAQ32v9zhrxmg4uWH_g4Y",
@@ -34,7 +44,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
 function checkAndRegisterServiceWorker() {
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js').catch(err => console.error('SW error:', err));
+    navigator.serviceWorker.register('/sw.js')
+      .then(reg => console.log('Service Worker registered:', reg.scope))
+      .catch(err => console.error('Service Worker registration failed:', err));
   }
 }
 
@@ -285,24 +297,74 @@ function setupTimetableUpload() {
     const file = e.target.files[0];
     if (!file) return;
 
-    statusDiv.textContent = "Processing timetable file...";
+    statusDiv.textContent = "Analyzing timetable with AI... Please wait ⏳";
     const user = auth.currentUser;
-    if (user) {
-      try {
-        await addDoc(collection(db, `users/${user.uid}/timetable`), {
-          day: "Friday",
-          time: "09:00 - 10:00",
-          subject: "Business Analytics",
-          room: "Room 204",
-          teacher: "Dr. Usman"
-        });
-        statusDiv.textContent = "Timetable successfully processed!";
+    if (!user) {
+      statusDiv.textContent = "Error: User not authenticated.";
+      return;
+    }
+
+    try {
+      const base64Data = await fileToBase64(file);
+      const extractedClasses = await analyzeTimetableWithAI(base64Data, file.type);
+
+      if (extractedClasses && extractedClasses.length > 0) {
+        for (const cls of extractedClasses) {
+          await addDoc(collection(db, `users/${user.uid}/timetable`), {
+            day: cls.day || "Monday",
+            time: cls.time || "08:00 - 09:00",
+            subject: cls.subject || "General Class",
+            room: cls.room || "TBD",
+            teacher: cls.teacher || "TBD"
+          });
+        }
+        statusDiv.textContent = "Success! Timetable analyzed and saved automatically 🎉";
         loadUserData(user.uid);
-      } catch (err) {
-        statusDiv.textContent = "Error: " + err.message;
+      } else {
+        statusDiv.textContent = "Could not parse schedule. Please try a clearer image.";
       }
+    } catch (err) {
+      console.error("AI Analysis Error:", err);
+      statusDiv.textContent = "Error analyzing timetable: " + err.message;
     }
   });
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = error => reject(error);
+  });
+}
+
+async function analyzeTimetableWithAI(base64Image, mimeType) {
+  const GEMINI_API_KEY = "AIzaSyBZhcFXrC_16FLAQ32v9zhrxmg4uWH_g4Y";
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+
+  const prompt = `Analyze this timetable image and extract all classes. Return ONLY a valid JSON array of objects with keys: day, time (e.g. 08:00 - 09:30), subject, room, teacher. Do not include markdown formatting like \`\`\`json, just return the raw JSON array.`;
+
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{
+        parts: [
+          { text: prompt },
+          { inline_data: { mime_type: mimeType || "image/jpeg", data: base64Image } }
+        ]
+      }]
+    })
+  });
+
+  const data = await response.json();
+  const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  
+  if (!textResponse) throw new Error("No response from AI model.");
+
+  const cleanJson = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+  return JSON.parse(cleanJson);
 }
 
 function setupNotificationsUI() {
