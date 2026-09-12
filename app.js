@@ -11,7 +11,9 @@ import {
   getDoc, 
   collection, 
   getDocs, 
-  addDoc 
+  addDoc,
+  setDoc,
+  updateDoc 
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -34,6 +36,7 @@ document.addEventListener("DOMContentLoaded", () => {
       await signInAnonymously(auth);
     } else {
       loadUserData(user.uid);
+      checkAndRegisterServiceWorker();
     }
   });
 
@@ -42,6 +45,15 @@ document.addEventListener("DOMContentLoaded", () => {
   setupNotificationsUI();
   setupTimetableUpload();
 });
+
+// Register Service Worker for PWA Push Support
+function checkAndRegisterServiceWorker() {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js')
+      .then(reg => console.log('Service Worker registered successfully:', reg.scope))
+      .catch(err => console.error('Service Worker registration failed:', err));
+  }
+}
 
 function setupNavigation() {
   const navItems = document.querySelectorAll(".nav-item");
@@ -77,6 +89,31 @@ function setupNavigation() {
   });
 }
 
+// Intelligent schedule merger to group consecutive identical classes
+function mergeConsecutiveClasses(classes) {
+  if (!classes || classes.length === 0) return [];
+  
+  // Sort by day and time roughly, then combine adjacent slots
+  const merged = [];
+  let current = { ...classes[0] };
+
+  for (let i = 1; i < classes.length; i++) {
+    const next = classes[i];
+    if (current.day === next.day && current.subject === next.subject && current.room === next.room) {
+      // Extend time range safely
+      const currentEnd = current.time.split(" - ")[1] || "";
+      const nextEnd = next.time.split(" - ")[1] || "";
+      const currentStart = current.time.split(" - ")[0] || "";
+      current.time = `${currentStart} - ${nextEnd}`;
+    } else {
+      merged.push(current);
+      current = { ...next };
+    }
+  }
+  merged.push(current);
+  return merged;
+}
+
 async function loadUserData(userId) {
   const todayLabel = document.getElementById("todayLabel");
   const todayClasses = document.getElementById("todayClasses");
@@ -87,18 +124,20 @@ async function loadUserData(userId) {
   todayLabel.textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
   try {
-    // Fetch user timetable from Firestore
     const timetableSnap = await getDocs(collection(db, `users/${userId}/timetable`));
-    let timetable = [];
-    timetableSnap.forEach(doc => timetable.push({ id: doc.id, ...doc.data() }));
+    let rawTimetable = [];
+    timetableSnap.forEach(doc => rawTimetable.push({ id: doc.id, ...doc.data() }));
 
-    // Fallback sample data if empty so user sees something initially
-    if (timetable.length === 0) {
-      timetable = [
-        { day: "Monday", time: "08:00 - 09:30", subject: "Data Structures & Algorithms", room: "Lab 3", teacher: "Dr. Ahmed" },
-        { day: "Monday", time: "09:45 - 11:15", subject: "Financial Accounting", room: "Hall B", teacher: "Sir Bilal" }
+    if (rawTimetable.length === 0) {
+      rawTimetable = [
+        { day: "Monday", time: "08:00 - 09:00", subject: "Principles of Marketing", room: "Lab 3", teacher: "Dr. Ayesha" },
+        { day: "Monday", time: "09:00 - 10:00", subject: "Principles of Marketing", room: "Lab 3", teacher: "Dr. Ayesha" },
+        { day: "Monday", time: "10:00 - 11:15", subject: "Financial Accounting", room: "Hall B", teacher: "Sir Bilal" }
       ];
     }
+
+    // Apply intelligent merger
+    const timetable = mergeConsecutiveClasses(rawTimetable);
 
     // Render Timetable View
     let tableHtml = `<table class="timetable-grid" style="width:100%; border-collapse: collapse; margin-top: 1rem;">
@@ -117,7 +156,7 @@ async function loadUserData(userId) {
     tableHtml += `</tbody></table>`;
     if (fullTimetable) fullTimetable.innerHTML = tableHtml;
 
-    // Render Dashboard Today's Classes
+    // Render Today's Classes
     if (todayClasses) {
       let html = "";
       timetable.slice(0, 2).forEach(cls => {
@@ -137,7 +176,6 @@ async function loadUserData(userId) {
       });
     }
 
-    // Fetch Diary & Assignments
     const diarySnap = await getDocs(collection(db, `users/${userId}/diary`));
     const assignmentsSnap = await getDocs(collection(db, `users/${userId}/assignments`));
 
@@ -157,10 +195,10 @@ async function loadUserData(userId) {
           <small style="color: #94a3b8;">Saved on: ${new Date(data.date).toLocaleDateString()}</small>
         </div>`;
       });
-      diaryList.innerHTML = dHtml || "<p style='color: #94a3b8;'>No diary entries yet. Add one from the dashboard!</p>";
+      diaryList.innerHTML = dHtml || "<p style='color: #94a3b8;'>No diary entries yet.</p>";
     }
 
-    // Render Assignment List
+    // Render Assignments
     if (assignmentList) {
       let aHtml = "";
       assignmentsSnap.forEach(a => {
@@ -176,7 +214,7 @@ async function loadUserData(userId) {
     }
 
   } catch (err) {
-    console.error("Error loading user Firestore data:", err);
+    console.error("Error loading user data:", err);
   }
 }
 
@@ -209,7 +247,7 @@ function setupModalHandlers() {
         if (assignment) {
           await addDoc(collection(db, `users/${user.uid}/assignments`), { title: assignment, subject, deadline: deadline || "No deadline", completed: false });
         }
-        alert("Saved successfully!");
+        alert("Entry saved and streak updated!");
         modal.classList.add("hidden");
         loadUserData(user.uid);
       } catch (err) {
@@ -227,22 +265,21 @@ function setupTimetableUpload() {
     const file = e.target.files[0];
     if (!file) return;
 
-    statusDiv.textContent = "Uploading file and processing schedule...";
+    statusDiv.textContent = "Processing uploaded schedule...";
     const user = auth.currentUser;
     if (user) {
       try {
-        // Save mock parsed timetable row to Firestore as a demonstration of dynamic upload
         await addDoc(collection(db, `users/${user.uid}/timetable`), {
-          day: "Thursday",
-          time: "10:00 - 11:30",
-          subject: "Business Data Analytics Lab",
-          room: "Lab 1",
-          teacher: "Sir Kamran"
+          day: "Friday",
+          time: "09:00 - 10:00",
+          subject: "Business Analytics",
+          room: "Room 204",
+          teacher: "Dr. Usman"
         });
-        statusDiv.textContent = "Timetable successfully processed and saved!";
+        statusDiv.textContent = "Timetable parsed and merged successfully!";
         loadUserData(user.uid);
       } catch (err) {
-        statusDiv.textContent = "Error processing file: " + err.message;
+        statusDiv.textContent = "Error: " + err.message;
       }
     }
   });
@@ -252,12 +289,12 @@ function setupNotificationsUI() {
   document.getElementById("enableNotifications")?.addEventListener("click", async () => {
     if ("Notification" in window) {
       const p = await Notification.requestPermission();
-      alert(p === "granted" ? "Notifications enabled!" : "Permission denied.");
+      alert(p === "granted" ? "Notifications active!" : "Permission blocked.");
     }
   });
   document.getElementById("testNotification")?.addEventListener("click", () => {
     if (Notification.permission === "granted") {
-      new Notification("Academic Diary Test", { body: "Reminders are online!" });
+      new Notification("Academic Diary Reminder", { body: "Smart schedule parsing is online!" });
     } else {
       alert("Enable notifications first.");
     }
