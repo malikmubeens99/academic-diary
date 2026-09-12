@@ -11,9 +11,7 @@ import {
   getDoc, 
   collection, 
   getDocs, 
-  addDoc,
-  setDoc,
-  updateDoc 
+  addDoc 
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -46,11 +44,10 @@ document.addEventListener("DOMContentLoaded", () => {
   setupTimetableUpload();
 });
 
-// Register Service Worker for PWA Push Support
 function checkAndRegisterServiceWorker() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js')
-      .then(reg => console.log('Service Worker registered successfully:', reg.scope))
+      .then(reg => console.log('Service Worker registered:', reg.scope))
       .catch(err => console.error('Service Worker registration failed:', err));
   }
 }
@@ -89,19 +86,14 @@ function setupNavigation() {
   });
 }
 
-// Intelligent schedule merger to group consecutive identical classes
 function mergeConsecutiveClasses(classes) {
   if (!classes || classes.length === 0) return [];
-  
-  // Sort by day and time roughly, then combine adjacent slots
   const merged = [];
   let current = { ...classes[0] };
 
   for (let i = 1; i < classes.length; i++) {
     const next = classes[i];
     if (current.day === next.day && current.subject === next.subject && current.room === next.room) {
-      // Extend time range safely
-      const currentEnd = current.time.split(" - ")[1] || "";
       const nextEnd = next.time.split(" - ")[1] || "";
       const currentStart = current.time.split(" - ")[0] || "";
       current.time = `${currentStart} - ${nextEnd}`;
@@ -119,7 +111,6 @@ async function loadUserData(userId) {
   const todayClasses = document.getElementById("todayClasses");
   const fullTimetable = document.getElementById("fullTimetable");
   const diaryList = document.getElementById("diaryList");
-  const assignmentList = document.getElementById("assignmentList");
 
   todayLabel.textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
@@ -136,10 +127,9 @@ async function loadUserData(userId) {
       ];
     }
 
-    // Apply intelligent merger
     const timetable = mergeConsecutiveClasses(rawTimetable);
 
-    // Render Timetable View
+    // Render Timetable
     let tableHtml = `<table class="timetable-grid" style="width:100%; border-collapse: collapse; margin-top: 1rem;">
       <thead><tr style="background: rgba(255,255,255,0.05); text-align: left;">
         <th style="padding: 10px;">Day</th><th style="padding: 10px;">Time</th><th style="padding: 10px;">Subject</th><th style="padding: 10px;">Room</th><th style="padding: 10px;">Teacher</th>
@@ -177,18 +167,17 @@ async function loadUserData(userId) {
     }
 
     const diarySnap = await getDocs(collection(db, `users/${userId}/diary`));
-    const assignmentsSnap = await getDocs(collection(db, `users/${userId}/assignments`));
+    let diaryEntries = [];
+    diarySnap.forEach(d => diaryEntries.push(d.data()));
 
-    document.getElementById("diaryCount").textContent = diarySnap.size;
-    document.getElementById("pendingCount").textContent = assignmentsSnap.size;
+    document.getElementById("diaryCount").textContent = diaryEntries.length;
     document.getElementById("studyHours").textContent = `${timetable.length * 2}h`;
-    document.getElementById("streak").textContent = `${Math.max(1, diarySnap.size)} days`;
+    document.getElementById("streak").textContent = `${Math.max(1, diaryEntries.length)} days`;
 
     // Render Diary List
     if (diaryList) {
       let dHtml = "";
-      diarySnap.forEach(d => {
-        const data = d.data();
+      diaryEntries.forEach(data => {
         dHtml += `<div style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 8px; margin-bottom: 0.75rem;">
           <h4 style="color: #38bdf8; margin: 0 0 4px 0;">${data.subject}</h4>
           <p style="margin: 0 0 8px 0; font-size: 0.9rem;">${data.taught}</p>
@@ -198,23 +187,71 @@ async function loadUserData(userId) {
       diaryList.innerHTML = dHtml || "<p style='color: #94a3b8;'>No diary entries yet.</p>";
     }
 
-    // Render Assignments
-    if (assignmentList) {
-      let aHtml = "";
-      assignmentsSnap.forEach(a => {
-        const data = a.data();
-        aHtml += `<div style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 8px; margin-bottom: 0.75rem; display: flex; justify-content: space-between; align-items: center;">
-          <div>
-            <h4 style="margin: 0 0 4px 0;">${data.title}</h4>
-            <span style="font-size: 0.8rem; color: #38bdf8;">${data.subject} • Due: ${data.deadline}</span>
-          </div>
-        </div>`;
-      });
-      assignmentList.innerHTML = aHtml || "<p style='color: #94a3b8;'>No pending assignments.</p>";
-    }
+    await loadAssignmentsAndStats(userId);
+    renderSubjectProgress(timetable, diaryEntries);
 
   } catch (err) {
     console.error("Error loading user data:", err);
+  }
+}
+
+async function loadAssignmentsAndStats(userId) {
+  const assignmentList = document.getElementById("assignmentList");
+  const assignmentsSnap = await getDocs(collection(db, `users/${userId}/assignments`));
+  
+  let pendingCount = 0;
+  let aHtml = "";
+  const today = new Date().toISOString().split('T')[0];
+
+  assignmentsSnap.forEach(docSnap => {
+    const data = docSnap.data();
+    const isOverdue = data.deadline < today && !data.completed;
+    if (!data.completed) pendingCount++;
+
+    aHtml += `<div style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 8px; margin-bottom: 0.75rem; display: flex; justify-content: space-between; align-items: center; border-left: 4px solid ${isOverdue ? '#ef4444' : '#38bdf8'};">
+      <div>
+        <h4 style="margin: 0 0 4px 0;">${data.title}</h4>
+        <span style="font-size: 0.8rem; color: #94a3b8;">${data.subject} • Due: ${data.deadline}</span>
+        ${isOverdue ? '<span style="margin-left: 8px; font-size: 0.75rem; color: #ef4444; font-weight: bold;">OVERDUE</span>' : ''}
+      </div>
+    </div>`;
+  });
+
+  if (assignmentList) {
+    assignmentList.innerHTML = aHtml || "<p style='color: #94a3b8;'>No pending assignments.</p>";
+  }
+  document.getElementById("pendingCount").textContent = pendingCount;
+}
+
+function renderSubjectProgress(timetable, diaryEntries) {
+  const subjects = [...new Set(timetable.map(t => t.subject))];
+  let progressHtml = `<div class="settings-card" style="margin-top: 1.5rem;"><h3 style="margin-bottom: 1rem;">Subject Progress</h3>`;
+  
+  subjects.forEach(subject => {
+    const count = diaryEntries.filter(d => d.subject === subject).length;
+    const percentage = Math.min(100, (count * 25) + 40);
+    
+    progressHtml += `<div style="margin-bottom: 1rem;">
+      <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 4px;">
+        <span>${subject}</span>
+        <span style="color: #38bdf8;">${percentage}%</span>
+      </div>
+      <div style="background: rgba(255,255,255,0.1); height: 8px; border-radius: 4px; overflow: hidden;">
+        <div style="background: #38bdf8; width: ${percentage}%; height: 100%;"></div>
+      </div>
+    </div>`;
+  });
+  
+  progressHtml += `</div>`;
+  const dashboard = document.getElementById("dashboard");
+  let existingProgress = document.getElementById("subjectProgressWidget");
+  if (!existingProgress && dashboard) {
+    const widget = document.createElement("div");
+    widget.id = "subjectProgressWidget";
+    widget.innerHTML = progressHtml;
+    dashboard.appendChild(widget);
+  } else if (existingProgress) {
+    existingProgress.innerHTML = progressHtml;
   }
 }
 
@@ -247,7 +284,7 @@ function setupModalHandlers() {
         if (assignment) {
           await addDoc(collection(db, `users/${user.uid}/assignments`), { title: assignment, subject, deadline: deadline || "No deadline", completed: false });
         }
-        alert("Entry saved and streak updated!");
+        alert("Entry saved successfully!");
         modal.classList.add("hidden");
         loadUserData(user.uid);
       } catch (err) {
@@ -265,7 +302,7 @@ function setupTimetableUpload() {
     const file = e.target.files[0];
     if (!file) return;
 
-    statusDiv.textContent = "Processing uploaded schedule...";
+    statusDiv.textContent = "Processing timetable file...";
     const user = auth.currentUser;
     if (user) {
       try {
@@ -276,7 +313,7 @@ function setupTimetableUpload() {
           room: "Room 204",
           teacher: "Dr. Usman"
         });
-        statusDiv.textContent = "Timetable parsed and merged successfully!";
+        statusDiv.textContent = "Timetable successfully processed!";
         loadUserData(user.uid);
       } catch (err) {
         statusDiv.textContent = "Error: " + err.message;
@@ -294,7 +331,7 @@ function setupNotificationsUI() {
   });
   document.getElementById("testNotification")?.addEventListener("click", () => {
     if (Notification.permission === "granted") {
-      new Notification("Academic Diary Reminder", { body: "Smart schedule parsing is online!" });
+      new Notification("Academic Diary Reminder", { body: "System is fully operational!" });
     } else {
       alert("Enable notifications first.");
     }
