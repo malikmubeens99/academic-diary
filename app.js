@@ -384,9 +384,19 @@ async function analyzeTimetableWithAI(base64Image, mimeType) {
   });
 
   const data = await response.json();
+  
+  // Debug response to inspect what the API returns
+  console.log("Full Gemini API Response:", data);
+
+  if (data.error) {
+    throw new Error(data.error.message || "Gemini API Error");
+  }
+
   const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
   
-  if (!textResponse) throw new Error("No response from AI model.");
+  if (!textResponse) {
+    throw new Error("Model returned no text. Check console for details.");
+  }
 
   const cleanJson = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
   return JSON.parse(cleanJson);
