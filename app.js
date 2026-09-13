@@ -130,7 +130,13 @@ async function analyzeTimetable(){
             { text: prompt },
             { inline_data: { mime_type: file.type || "image/jpeg", data: base64Data } }
           ]
-        }]
+        }],
+        safetySettings: [
+          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+        ]
       })
     });
 
@@ -139,8 +145,17 @@ async function analyzeTimetable(){
 
     if (data.error) throw new Error(data.error.message || "Gemini API Error");
 
-    const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!textResponse) throw new Error("No response from AI model.");
+    const candidate = data.candidates?.[0];
+    if (!candidate) {
+      throw new Error("No response candidates from AI model. The image might be unclear.");
+    }
+
+    if (candidate.finishReason && candidate.finishReason !== "STOP") {
+      throw new Error(`AI generation stopped due to: ${candidate.finishReason}`);
+    }
+
+    const textResponse = candidate.content?.parts?.[0]?.text;
+    if (!textResponse) throw new Error("Model returned no text content.");
 
     let cleanJson = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
     const jsonMatch = cleanJson.match(/\[[\s\S]*\]/);
