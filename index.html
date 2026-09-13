@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111827"><meta name="description" content="Academic Diary - timetable, diary, assignments and study reminders">
+<link rel="manifest" href="manifest.json"><link rel="stylesheet" href="styles.css">
+<title>Academic Diary</title>
+</head>
+<body>
+<div id="authView" class="auth-wrap"><div class="auth-card"><div class="brand"><div class="brand-mark">AD</div><div><b>Academic Diary</b><span>Your semester, organized.</span></div></div><div class="auth-tabs"><button class="active" data-auth="login">Login</button><button data-auth="signup">Create account</button></div>
+<form id="loginForm"><h1>Welcome back</h1><p>Keep your classes, notes and assignments in one place.</p><input id="loginEmail" type="email" placeholder="Email" required><input id="loginPassword" type="password" placeholder="Password" required><button class="primary" type="submit">Login</button></form>
+<form id="signupForm" class="hidden"><h1>Create your diary</h1><p>Start organizing your semester today.</p><input id="signupName" placeholder="Full name" required><input id="signupEmail" type="email" placeholder="Email" required><input id="signupPassword" type="password" minlength="6" placeholder="Password (6+ characters)" required><button class="primary" type="submit">Create account</button></form><div id="authMsg" class="msg"></div></div></div>
+<div id="appView" class="app hidden"><aside class="sidebar"><div class="brand"><div class="brand-mark">AD</div><div><b>Academic Diary</b><span>Study smarter</span></div></div><nav id="sideNav"><button class="nav active" data-page="home">⌂ <span>Home</span></button><button class="nav" data-page="timetable">▦ <span>Timetable</span></button><button class="nav" data-page="diary">✎ <span>Diary</span></button><button class="nav" data-page="tasks">✓ <span>Assignments</span></button><button class="nav" data-page="settings">⚙ <span>Settings</span></button></nav><button id="logoutBtn" class="logout">Log out</button></aside>
+<main><header class="topbar"><div><small id="dateLabel"></small><h2 id="pageTitle">Good morning 👋</h2></div><button id="quickAdd" class="primary small">+ Add note</button></header><section id="home" class="page active"></section><section id="timetable" class="page"></section><section id="diary" class="page"></section><section id="tasks" class="page"></section><section id="settings" class="page"></section></main><nav class="bottom-nav"><button class="nav active" data-page="home">⌂<small>Home</small></button><button class="nav" data-page="timetable">▦<small>Timetable</small></button><button class="nav" data-page="diary">✎<small>Diary</small></button><button class="nav" data-page="tasks">✓<small>Tasks</small></button><button class="nav" data-page="settings">⚙<small>Settings</small></button></nav></div>
+<div id="modal" class="modal hidden"><div class="modal-card"><button id="closeModal" class="close">×</button><div id="modalContent"></div></div></div>
+<script type="module" src="app.js"></script></body></html>
