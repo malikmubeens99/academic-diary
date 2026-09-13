@@ -6,7 +6,7 @@ import {getMessaging,getToken,onMessage} from 'https://www.gstatic.com/firebasej
 
 const firebaseConfig={apiKey:'AIzaSyBZhcFXrC_16FLAQ32v9zhrxmg4uWH_gY4',authDomain:'academic-diary-3a12d.firebaseapp.com',projectId:'academic-diary-3a12d',storageBucket:'academic-diary-3a12d.firebasestorage.app',messagingSenderId:'654645926256',appId:'1:654645926256:web:872c7cb1ad3425af4e17b5',measurementId:'G-SZE0CLZ4L0'};
 // Paste the PUBLIC VAPID key generated in Firebase Console here.
-const VAPID_PUBLIC_KEY='PASTE_YOUR_PUBLIC_VAPID_KEY_HERE';
+const VAPID_PUBLIC_KEY='BNvA4c_XnfgDlg6tU0mqbs6zNgZhQM1Ht9R1mZLlxU6zugM5KqQhvPfSW1QGBQdwGSoQJQH2ybWfZdR4hF1GSlE';
 const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app),functions=getFunctions(app);
 let user=null,classes=[],notes=[],tasks=[],prefs={before:true,after:true,beforeMin:10};
 const sample=[['Monday','Principle of Marketing','08:00','11:00'],['Monday','Data Structures & Algorithms (TH)','13:00','15:00'],['Tuesday','Data Structures & Algorithms (Lab)','08:00','11:00'],['Tuesday','Psychology','13:00','15:00'],['Wednesday','Quantitative Reasoning I','11:00','12:00'],['Wednesday','Financial Accounting','14:00','16:00'],['Thursday','Quantitative Reasoning I','08:00','10:00'],['Thursday','Data Structures & Algorithms (TH)','11:00','12:00'],['Thursday','Business Mathematics II','13:00','14:00'],['Friday','Financial Accounting','08:00','09:00'],['Friday','Business Mathematics II','09:00','11:00']].map(x=>({day:x[0],subject:x[1],start:x[2],end:x[3]}));
