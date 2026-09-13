@@ -1,15 +1,22 @@
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js';
 import {getAuth,onAuthStateChanged,createUserWithEmailAndPassword,signInWithEmailAndPassword,signOut,updateProfile} from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-auth.js';
 import {getFirestore,doc,setDoc,getDoc,collection,addDoc,deleteDoc,onSnapshot} from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js';
-import {getFunctions,httpsCallable} from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-functions.js';
 import {getMessaging,getToken,onMessage} from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-messaging.js';
 
-const firebaseConfig={apiKey:'AIzaSyBZhcFXrC_16FLAQ32v9zhrxmg4uWH_gY4',authDomain:'academic-diary-3a12d.firebaseapp.com',projectId:'academic-diary-3a12d',storageBucket:'academic-diary-3a12d.firebasestorage.app',messagingSenderId:'654645926256',appId:'1:654645926256:web:872c7cb1ad3425af4e17b5',measurementId:''};
+const firebaseConfig={
+  apiKey:'AIzaSyBZhcFXrC_16FLAQ32v9zhrxmg4uWH_g4Y',
+  authDomain:'academic-diary-3a12d.firebaseapp.com',
+  projectId:'academic-diary-3a12d',
+  storageBucket:'academic-diary-3a12d.firebasestorage.app',
+  messagingSenderId:'654645926256',
+  appId:'1:654645926256:web:872c7cb1ad3425af4e17b5',
+  measurementId:'G-SZE0CLZ4L0'
+};
 
-// Firebase Web Push VAPID Key
 const VAPID_PUBLIC_KEY='BNvA4c_XnfgDlg6tU0mqbs6zNgZhQM1Ht9R1mZLlxU6zugM5KqQhvPfSW1QGBQdwGSoQJQH2ybWfZdR4hF1GSlE';
+const GEMINI_API_KEY='AIzaSyBIr1zSKNREyHANNrdFAUYFqhFle-qgfuw';
 
-const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app),functions=getFunctions(app);
+const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app);
 let user=null,classes=[],notes=[],tasks=[],prefs={before:true,after:true,beforeMin:10};
 
 const sample=[['Monday','Principle of Marketing','08:00','11:00'],['Monday','Data Structures & Algorithms (TH)','13:00','15:00'],['Tuesday','Data Structures & Algorithms (Lab)','08:00','11:00'],['Tuesday','Psychology','13:00','15:00'],['Wednesday','Quantitative Reasoning I','11:00','12:00'],['Wednesday','Financial Accounting','14:00','16:00'],['Thursday','Quantitative Reasoning I','08:00','10:00'],['Thursday','Data Structures & Algorithms (TH)','11:00','12:00'],['Thursday','Business Mathematics II','13:00','14:00'],['Friday','Financial Accounting','08:00','09:00'],['Friday','Business Mathematics II','09:00','11:00']].map(x=>({day:x[0],subject:x[1],start:x[2],end:x[3]}));
@@ -33,12 +40,10 @@ async function loadData(){
     classes=s.docs.map(d=>({id:d.id,...d.data()}));
     renderAll();
   });
-  
   onSnapshot(collection(db,'users',user.uid,'notes'),s=>{
     notes=s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0));
     renderAll();
   });
-  
   onSnapshot(collection(db,'users',user.uid,'tasks'),s=>{
     tasks=s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>String(a.due||'').localeCompare(String(b.due||'')));
     renderAll();
@@ -80,7 +85,7 @@ function renderTimetable(){
     <div class="row"><div><h3>Weekly timetable</h3><p class="muted">Classes are synced to Firebase.</p></div><div><button class="secondary" id="importSample">Add sample</button> <button class="primary small" id="addClass">+ Add class</button></div></div>
     <div class="upload">
       <b>🤖 AI timetable import</b>
-      <p class="muted">Upload a timetable image or PDF. AI will read days/times, merge consecutive slots, and show you a preview before saving.</p>
+      <p class="muted">Upload a timetable image or PDF. AI will read days/times and show you a preview before saving.</p>
       <input id="aiFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif,application/pdf">
       <button class="primary" id="aiImport">Analyze timetable</button>
       <div id="aiStatus" class="muted"></div>
@@ -93,23 +98,28 @@ function renderTimetable(){
   document.querySelectorAll('[data-del-class]').forEach(b=>b.onclick=async()=>deleteDoc(doc(db,'users',user.uid,'classes',b.dataset.delClass)));
 }
 
-function fileToBase64(file){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result).split(',')[1]);r.onerror=reject;r.readAsDataURL(file)})}
+function fileToBase64(file){
+  return new Promise((resolve,reject)=>{
+    const r=new FileReader();
+    r.onload=()=>resolve(String(r.result).split(',')[1]);
+    r.onerror=reject;
+    r.readAsDataURL(file);
+  });
+}
 
 async function analyzeTimetable(){
   const file=$('aiFile')?.files?.[0];
   if(!file)return alert('Please select a timetable image or PDF first.');
   if(file.size>15*1024*1024)return alert('Please keep the file under 15 MB.');
-  if(!['application/pdf','image/png','image/jpeg','image/webp','image/gif'].includes(file.type))return alert('Use PDF, PNG, JPG or WEBP.');
   
   $('aiStatus').textContent='AI is reading your timetable…';
   $('aiImport').disabled=true;
   
   try {
     const base64Data = await fileToBase64(file);
-    const GEMINI_API_KEY = "AIzaSyBIr1zSKNREyHANNrdFAUYFqhFle-qgfuw";
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
     
-    const prompt = `Analyze this timetable document/image and extract all classes. Return ONLY a valid JSON array of objects with keys: day, subject, start (HH:MM 24h format), end (HH:MM 24h format). Do not include markdown formatting like \`\`\`json, just return the raw JSON array.`;
+    const prompt = `Analyze this timetable document/image and extract all classes. Return ONLY a valid JSON array of objects with keys: day, subject, start (HH:MM in 24h format), end (HH:MM in 24h format). Do not include markdown formatting like \`\`\`json, just return the raw JSON array.`;
 
     const response = await fetch(endpoint, {
       method: "POST",
@@ -118,7 +128,7 @@ async function analyzeTimetable(){
         contents: [{
           parts: [
             { text: prompt },
-            { inline_data: { mime_type: file.type, data: base64Data } }
+            { inline_data: { mime_type: file.type || "image/jpeg", data: base64Data } }
           ]
         }]
       })
