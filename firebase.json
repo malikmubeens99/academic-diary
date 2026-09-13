@@ -1,5 +1,0 @@
-{
-  "functions": {"source":"functions"},
-  "firestore": {"rules":"firestore.rules"},
-  "hosting": {"public":".","ignore":["functions/**","firebase.json","firestore.rules","*.zip","node_modules/**"]}
-}
