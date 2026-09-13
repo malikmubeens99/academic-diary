@@ -119,7 +119,7 @@ async function analyzeTimetable(){
     const base64Data = await fileToBase64(file);
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
     
-    const prompt = `Analyze this timetable document/image and extract all classes. Return ONLY a valid JSON array of objects with keys: day, subject, start (HH:MM in 24h format), end (HH:MM in 24h format). Do not include markdown formatting like \`\`\`json, just return the raw JSON array.`;
+    const prompt = `Analyze this timetable document/image and extract all classes. Return ONLY a valid JSON array of objects with keys: day, subject, start (HH:MM in 24h format), end (HH:MM in 24h format). No extra text or explanations.`;
 
     const response = await fetch(endpoint, {
       method: "POST",
@@ -135,20 +135,30 @@ async function analyzeTimetable(){
     });
 
     const data = await response.json();
+    console.log("Gemini API Raw Response:", data);
+
     if (data.error) throw new Error(data.error.message || "Gemini API Error");
 
     const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!textResponse) throw new Error("No response from AI model.");
 
-    const cleanJson = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+    let cleanJson = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+    const jsonMatch = cleanJson.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      cleanJson = jsonMatch[0];
+    }
+
     const rows = JSON.parse(cleanJson);
+    if (!Array.isArray(rows) || rows.length === 0) {
+      throw new Error("AI could not find any classes in this image.");
+    }
 
     $('aiStatus').textContent=`Found ${rows.length} classes. Review them below.`;
     previewAiClasses(rows);
   } catch(e){
-    console.error(e);
+    console.error("AI Parsing Error:", e);
     $('aiStatus').textContent='';
-    alert(e.message||'AI parsing failed.');
+    alert("AI parsing failed: " + e.message);
   } finally {
     $('aiImport').disabled=false;
   }
@@ -248,7 +258,7 @@ function setupAuth(){
     $('signupForm').classList.toggle('hidden',b.dataset.auth!=='signup');
   });
   $('loginForm').onsubmit=async e=>{e.preventDefault();try{await signInWithEmailAndPassword(auth,$('loginEmail').value,$('loginPassword').value)}catch(e){toast(e.message)}};
-  $('signupForm').onsubmit=async e=>{e.preventDefault();try{const r=await createUserWithEmailAndPassword(auth,$('signupEmail').value,$('signupPassword').value);await updateProfile(r.user,{displayName:$('signupName').value});await setDoc(doc(db,'users',r.user.uid),{name:$('signupName').value,email:r.user.email,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone,preferences:prefs},{merge:true});}catch(e){toast(e.message)}};
+  $('signupForm').onsubmit=async e=>{e.preventDefault();try{const r=await createUserWithEmailAndPassword(auth,$('signupEmail').value,$('signupPassword').value);await updateProfile(r.user,{displayName:$('signupName').value});await setDoc(doc(db,'users',r.user.uid),{name:$('signupName').value,email:r.user.email,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone,preferences:prefs},{merge:true});}catch(e){toast(e.message)}}}
 }
 
 function setupNav(){
